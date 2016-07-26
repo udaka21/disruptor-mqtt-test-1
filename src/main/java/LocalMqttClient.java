@@ -30,15 +30,17 @@ public class LocalMqttClient {
 
     private static String brokerURL;
     private String topic;
+    String publisherClientId;
     org.eclipse.paho.client.mqttv3.MqttClient mqttPublisherClient;
 
-    public LocalMqttClient (String brokerURL, String topic){
+    public LocalMqttClient (String brokerURL, String topic,String publisherClientId){
 
         this.brokerURL=brokerURL;
         this.topic=topic;
+        this.publisherClientId=publisherClientId;
 
-        String publisherClientId = "publisher";
-        log.info("Running sample");
+
+        log.info("Running Client URL "+brokerURL);
 
 
         try {
@@ -77,7 +79,7 @@ public class LocalMqttClient {
     public void clientShutdown(){
         try {
             mqttPublisherClient.disconnect();
-            log.info("Client Disconnect");
+            log.info("Client Disconnect " +publisherClientId);
         }catch (Exception e){
 
         }

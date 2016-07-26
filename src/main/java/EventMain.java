@@ -1,5 +1,7 @@
 import com.lmax.disruptor.RingBuffer;
 import com.lmax.disruptor.dsl.Disruptor;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
@@ -10,8 +12,13 @@ import java.util.concurrent.Executors;
 
 public class EventMain
 {
+
+    private static final Log log = LogFactory.getLog(EventMain.class);
+
     public static void main(String[] args) throws Exception
     {
+
+
         //Set File path
         String fileName = "temp.txt";
         String line = null;
@@ -37,13 +44,15 @@ public class EventMain
         */
 
         // Connect the handler
-        LocalMqttClient mq = new LocalMqttClient("tcp://localhost:1883","Topic 1");
+        LocalMqttClient mq = new LocalMqttClient("tcp://localhost:1883","Topic 1","publisher");
         MessagePublishEventHandler msgHandler = new MessagePublishEventHandler(mq,0,2);
-        disruptor.handleEventsWith(msgHandler);
 
-        LocalMqttClient mq1 = new LocalMqttClient("tcp://localhost:1884","Topic 2");
+
+        LocalMqttClient mq1 = new LocalMqttClient("tcp://localhost:1884","Topic 2","publisher2");
         MessagePublishEventHandler msgHandler1 = new MessagePublishEventHandler(mq1,1,2);
-        disruptor.handleEventsWith(msgHandler1);
+
+
+        disruptor.handleEventsWith(msgHandler).and( disruptor.handleEventsWith(msgHandler1));
 
         // Start the Disruptor, starts all threads running
         disruptor.start();
@@ -85,6 +94,14 @@ public class EventMain
             e.printStackTrace();
         }
 
+
+          if (disruptor != null) {
+            disruptor.halt();
+            disruptor.shutdown();
+            log.info("Disruptor shutdown");
+              mq.clientShutdown();
+              mq1.clientShutdown();
+        }
 
 
     }
