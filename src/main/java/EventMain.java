@@ -1,5 +1,7 @@
+import com.lmax.disruptor.BlockingWaitStrategy;
 import com.lmax.disruptor.RingBuffer;
 import com.lmax.disruptor.dsl.Disruptor;
+import com.lmax.disruptor.dsl.ProducerType;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -7,16 +9,15 @@ import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-public class EventMain
-{
+public class EventMain {
 
     private static final Log log = LogFactory.getLog(EventMain.class);
 
-    public static void main(String[] args) throws Exception
-    {
+    public static void main(String[] args) throws Exception {
 
 
         //Set File path
@@ -37,22 +38,26 @@ public class EventMain
         int bufferSize = 8;
 
         // Construct the Disruptor
-        Disruptor<Event> disruptor = new Disruptor<Event>(factory, bufferSize, executor);
-      /** Disruptor<Event> disruptor = new Disruptor(factory, bufferSize, executor, // Single producer
-                ProducerType.SINGLE,
-                new BlockingWaitStrategy());
-        */
+        Disruptor<Event> disruptor = new Disruptor(factory, bufferSize, executor, ProducerType.SINGLE, new BlockingWaitStrategy());
 
-        // Connect the handler
-        LocalMqttClient mq = new LocalMqttClient("tcp://localhost:1883","Topic 1","publisher");
-        MessagePublishEventHandler msgHandler = new MessagePublishEventHandler(mq,0,2);
+        int numberOfConsumer = 2;
 
 
-        LocalMqttClient mq1 = new LocalMqttClient("tcp://localhost:1884","Topic 2","publisher2");
-        MessagePublishEventHandler msgHandler1 = new MessagePublishEventHandler(mq1,1,2);
+        LocalMqttClient[] localMqttClient = new LocalMqttClient[numberOfConsumer];
+        MessagePublishEventHandler[] messagePublishEventHandler = new MessagePublishEventHandler[numberOfConsumer];
+
+        for (int r = 0; r < numberOfConsumer; r++) {
+
+            int mods = r % 2; // Because we use only 2 MB's
+            int port = 1883 + mods; // making MB URL port
+
+            // Connect the handler
+            localMqttClient[r] = new LocalMqttClient("tcp://localhost:" + port, "Topic " + r, "publisher " + r);
+            messagePublishEventHandler[r] = new MessagePublishEventHandler(localMqttClient[r], r, numberOfConsumer);
+        }
 
 
-        disruptor.handleEventsWith(msgHandler).and( disruptor.handleEventsWith(msgHandler1));
+        disruptor.handleEventsWith(messagePublishEventHandler);
 
         // Start the Disruptor, starts all threads running
         disruptor.start();
@@ -80,27 +85,27 @@ public class EventMain
                 line = bufferedReader.readLine();
                 // submit messages to write concurrently using disruptor
                 producer.onData(line);
-               // Thread.sleep(100);
-                }
+            }
             bufferedReader.close();
             fileReader.close();
 
 
-        }
-        catch (FileNotFoundException e) {
+        } catch (FileNotFoundException e) {
             e.printStackTrace();
-        }
-        catch (IOException e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
 
 
-          if (disruptor != null) {
+        if (disruptor != null) {
             disruptor.halt();
             disruptor.shutdown();
             log.info("Disruptor shutdown");
-              mq.clientShutdown();
-              mq1.clientShutdown();
+
+            for (int shtdwn = 0; shtdwn < numberOfConsumer; shtdwn++) {
+                localMqttClient[shtdwn].clientShutdown(); // client shutdown
+            }
+
         }
 
 
