@@ -80,7 +80,7 @@ public class EventMain
                 line = bufferedReader.readLine();
                 // submit messages to write concurrently using disruptor
                 producer.onData(line);
-                Thread.sleep(100);
+               // Thread.sleep(100);
                 }
             bufferedReader.close();
             fileReader.close();
