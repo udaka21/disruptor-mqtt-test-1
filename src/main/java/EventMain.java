@@ -1,27 +1,35 @@
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.lmax.disruptor.BlockingWaitStrategy;
 import com.lmax.disruptor.RingBuffer;
 import com.lmax.disruptor.dsl.Disruptor;
+import com.lmax.disruptor.dsl.ProducerType;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 
-public class EventMain
-{
-    public static void main(String[] args) throws Exception
-    {
+public class EventMain {
+
+    private static final Log log = LogFactory.getLog(EventMain.class);
+
+    public static void main(String[] args) throws Exception {
+
+
         //Set File path
         String fileName = "temp.txt";
-        String line = null;
+        String line;
         int lines = 0;
         // variable lines Calculate number of lines of Selected file.
         BufferedReader reader = new BufferedReader(new FileReader(fileName));
 
 
         // Executor that will be used to construct new threads for consumers
-        Executor executor = Executors.newCachedThreadPool();
+        ThreadFactory threadFactory =  new ThreadFactoryBuilder()
+                .setNameFormat("MQTTPublisherThreadPool-%d").build();
 
         // The factory for the event
         LocalEventFactory factory = new LocalEventFactory();
@@ -30,20 +38,27 @@ public class EventMain
         int bufferSize = 8;
 
         // Construct the Disruptor
-        Disruptor<Event> disruptor = new Disruptor<Event>(factory, bufferSize, executor);
-      /** Disruptor<Event> disruptor = new Disruptor(factory, bufferSize, executor, // Single producer
-                ProducerType.SINGLE,
-                new BlockingWaitStrategy());
-        */
+        Disruptor<Event> disruptor = new Disruptor<Event>(
+                factory, bufferSize, threadFactory, ProducerType.SINGLE, new BlockingWaitStrategy());
 
-        // Connect the handler
-        LocalMqttClient mq = new LocalMqttClient("tcp://localhost:1883","Topic 1");
-        MessagePublishEventHandler msgHandler = new MessagePublishEventHandler(mq,0,2);
-        disruptor.handleEventsWith(msgHandler);
+        int numberOfConsumer = 2;
 
-        LocalMqttClient mq1 = new LocalMqttClient("tcp://localhost:1884","Topic 2");
-        MessagePublishEventHandler msgHandler1 = new MessagePublishEventHandler(mq1,1,2);
-        disruptor.handleEventsWith(msgHandler1);
+
+        LocalMqttClient[] localMqttClient = new LocalMqttClient[numberOfConsumer];
+        MessagePublishEventHandler[] messagePublishEventHandler = new MessagePublishEventHandler[numberOfConsumer];
+
+        for (int r = 0; r < numberOfConsumer; r++) {
+
+            int mods = r % 2; // Because we use only 2 MB's
+            int port = 1883 + mods; // making MB URL port
+
+            // Connect the handler
+            localMqttClient[r] = new LocalMqttClient("tcp://localhost:" + port, "Topic " + r, "publisher " + r);
+            messagePublishEventHandler[r] = new MessagePublishEventHandler(localMqttClient[r], r, numberOfConsumer);
+        }
+
+
+        disruptor.handleEventsWith(messagePublishEventHandler);
 
         // Start the Disruptor, starts all threads running
         disruptor.start();
@@ -53,7 +68,8 @@ public class EventMain
 
         EventProducer producer = new EventProducer(ringBuffer);
 
-
+        FileReader fileReader= null;
+        BufferedReader bufferedReader = null;
         try {
             //count number of lines on  the  temp.txt file.
             while (reader.readLine() != null) {
@@ -61,30 +77,36 @@ public class EventMain
             }
             reader.close();
             // FileReader reads text files in the default encoding..
-            FileReader fileReader = new FileReader(fileName);
+             fileReader = new FileReader(fileName);
 
             // Always wrap FileReader in BufferedReader.
-            BufferedReader bufferedReader = new BufferedReader(fileReader);
+             bufferedReader = new BufferedReader(fileReader);
 
             for (int i = 0; i < lines; i++) {
                 //read line by line.
                 line = bufferedReader.readLine();
                 // submit messages to write concurrently using disruptor
                 producer.onData(line);
-                Thread.sleep(100);
-                }
+            }
+
+        } catch (FileNotFoundException e) {
+            log.info("File Not Found Exception",e);
+        } catch (IOException e) {
+            log.info("IOException" ,e);
+        }
+        finally {
             bufferedReader.close();
             fileReader.close();
-
-
-        }
-        catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
-        catch (IOException e) {
-            e.printStackTrace();
         }
 
+
+        disruptor.halt();
+        disruptor.shutdown();
+        log.info("Disruptor shutdown");
+
+        for (int shutdown = 0; shutdown < numberOfConsumer; shutdown++) {
+            localMqttClient[shutdown].clientShutdown();
+        }
 
 
     }

@@ -60,7 +60,7 @@ public class SimpleMQTTCallback implements MqttCallback {
     public void deliveryComplete(IMqttDeliveryToken iMqttDeliveryToken) {
 
         for (String topic : iMqttDeliveryToken.getTopics()) {
-            
+
             log.info("Message delivered successfully to topic : \"" + topic + "\".");
         }
     }

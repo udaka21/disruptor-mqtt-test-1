@@ -30,15 +30,16 @@ public class LocalMqttClient {
 
     private static String brokerURL;
     private String topic;
+    String publisherClientId;
     org.eclipse.paho.client.mqttv3.MqttClient mqttPublisherClient;
 
-    public LocalMqttClient (String brokerURL, String topic){
+    public LocalMqttClient(String brokerURL, String topic, String publisherClientId) {
 
-        this.brokerURL=brokerURL;
-        this.topic=topic;
+        this.brokerURL = brokerURL;
+        this.topic = topic;
+        this.publisherClientId = publisherClientId;
 
-        String publisherClientId = "publisher";
-        log.info("Running sample");
+        log.info("Running Client URL " + brokerURL);
 
 
         try {
@@ -48,7 +49,6 @@ public class LocalMqttClient {
         } catch (MqttException e) {
             log.error("Error running the sample", e);
         }
-
 
 
     }
@@ -61,25 +61,26 @@ public class LocalMqttClient {
     // The MQTT broker URL
     //private static final String brokerURL = "tcp://localhost:1883";
 
-    public void publishMessage(byte [] message) {
+    public void publishMessage(byte[] message) {
 
         try {
             // Publishing to mqtt topic "simpleTopic"
             mqttPublisherClient.publish(topic, message, QualityOfService.LEAST_ONCE.getValue(), false);
-            //mqttPublisherClient.disconnect();
-        }catch (Exception e) {
+
+        } catch (Exception e) {
 
         }
 
     }
 
 
-    public void clientShutdown(){
+    public void clientShutdown() {
         try {
             mqttPublisherClient.disconnect();
-            log.info("Client Disconnect");
-        }catch (Exception e){
-
+            mqttPublisherClient.close();
+            log.info("Client Disconnect " + publisherClientId);
+        } catch (Exception e) {
+            log.error("Error in client disconnecting", e);
         }
     }
 
